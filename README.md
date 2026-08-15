@@ -160,7 +160,7 @@
 ## 📁 仓库结构
 
 ```
-qwen38-serving-benchmark/
+qwen3.8-27b-q6k-fp8-rtx-pro5000-serving-benchmark/
 ├── README.md              # 本报告
 ├── scripts/
 │   ├── prefill_test.py    # prefill / TTFT 测试（随机文本防缓存）
