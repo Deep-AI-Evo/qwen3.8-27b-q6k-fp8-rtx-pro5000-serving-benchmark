@@ -32,7 +32,7 @@
 
 | # | 结论 | 依据 |
 |---|---|---|
-| 1 | **decode 王者：vLLM NVFP4** | 单流 49.6 t/s（比 Q6_K 快 25%）；两并发总体 88.8 t/s |
+| 1 | **decode 王者：vLLM NVFP4 + MTP** | 单流 63.6 t/s（比 Q6_K 快 60%）；两并发总体 112.6 t/s |
 | 2 | **prefill 王者：vLLM FP8** | 200K prefill 2114 t/s（比 NVFP4 快 54%） |
 | 3 | **agent 场景首选：vLLM（FP8 或 NVFP4）** | TTFT 全尺寸领先，决定 agent 体感 |
 | 4 | **llama.cpp 的价值：质量 + 极简运维** | Q6_K 权重精度最高（~6.5-bit），单 exe 部署 |
@@ -105,7 +105,24 @@
 
 > 💡 两并发总体吞吐（88.8 t/s）比单流（49.6 t/s）高 **~80%** —— 批处理效率提升，对 agent 多请求场景是重大利好。
 
-### 4.4 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
+### 4.4 MTP 投机解码（Multi-Token Prediction，1 层 nextn）
+
+> 启用方式：`--speculative-config '{"num_speculative_tokens": 1, "method": "mtp"}'`
+>（vLLM 自动从同 checkpoint 加载 `mtp.*` 权重作为 drafter）
+
+| 场景 | FP8 无 MTP | **FP8 + MTP** | NVFP4 无 MTP | **NVFP4 + MTP** |
+|:---|---:|---:|---:|---:|
+| 单流 ~11K | 37.3 t/s | **43.2 t/s (+16%)** | 49.6 t/s | **63.6 t/s (+28%)** 🏆 |
+| 两并发·平均每流 | 32.5 t/s | **44.0 t/s (+35%)** | 45.0 t/s | **56.3 t/s (+25%)** |
+| 两并发·总体 | 64.7 t/s | **87.0 t/s (+34%)** | 88.8 t/s | **112.6 t/s (+27%)** 🏆 |
+| 长上下文 ~148K | 26.4 t/s | **15.3 t/s (-42%)** ❌ | 42.1 t/s | **57.8 t/s (+37%)** 🏆 |
+
+> ⚠️ **重要发现**：MTP 在 FP8 上**长上下文反而大幅变慢**（-42%，复测两次确认），
+> 疑似 FP8 路径下 drafter 在长上下文的 KV/SSM 状态处理有缺陷（接受率坍塌，吞吐≈基线一半）；
+> 而 **NVFP4 (marlin) 路径的 MTP 在长上下文依然 +37%**。
+> 结论：**NVFP4 + MTP 是 decode 的终极形态**；FP8 + MTP 仅适合短/中上下文。
+
+### 4.5 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
 
 | 指标 | f16 KV | q8_0 KV | 差异 |
 |:---|---:|---:|---:|
@@ -115,7 +132,7 @@
 
 > **结论：q8_0 KV 以 ~1% 速度代价换取 50% KV 显存，并发从 2 提到 4。**
 
-### 4.5 模型质量参考（量化格式）
+### 4.6 模型质量参考（量化格式）
 
 | 格式 | 精度 | 相对 FP16 损失 |
 |:---|---:|---|
@@ -135,7 +152,7 @@
 | 大量短请求（工具调用） | ✅ TTFT 最快 | ✅ TTFT 接近 | ⚠️ ~2.5s 开销地板 |
 | 子 agent 并发生成 | ✅ 总体 64.7 | ✅ **总体 88.8** | ✅ 总体 68.2 |
 | RAG 长片段 prefill | ✅ **最快** | 中 | 慢 |
-| 长文写作 decode | ⚠️ 26-37 t/s | ✅ **42-50 t/s** | ✅ 39-40 t/s |
+| 长文写作 decode | ⚠️ 26-43 t/s（+MTP 短中程 43，长程 15 ❌） | ✅ **58-64 t/s（+MTP 全场景加速）** | ✅ 39-40 t/s |
 | 权重质量 | 近无损 | 4-bit（~1-2% 损失） | **最高** |
 
 **一句话**：**vLLM NVFP4 是综合最优解**——decode 最快、并发吞吐最高、权重最小（21.8 GiB）；FP8 仅在长文档 prefill 单项领先；llama.cpp Q6_K 在质量与运维简单性上保留价值。
@@ -183,7 +200,9 @@ qwen3.8-27b-q6k-fp8-rtx-pro5000-serving-benchmark/
 │   ├── prefill_test.py    # prefill / TTFT 测试（随机文本防缓存）
 │   ├── conc_test.py       # N 并发 decode profile 测试
 │   ├── start_qwen38q6_vision.bat  # llama.cpp Q6_K 部署
-│   └── run_vllm_nvfp4_bench.bat   # vLLM NVFP4 部署（marlin）
+│   ├── run_vllm_nvfp4_bench.bat   # vLLM NVFP4 部署（marlin）
+│   ├── run_vllm_fp8_mtp_bench.bat    # vLLM FP8 + MTP 投机解码
+│   └── run_vllm_nvfp4_mtp_bench.bat  # vLLM NVFP4 + MTP 投机解码
 ```
 
 ## 🔄 复现方法
