@@ -122,7 +122,21 @@
 > 而 **NVFP4 (marlin) 路径的 MTP 在长上下文依然 +37%**。
 > 结论：**NVFP4 + MTP 是 decode 的终极形态**；FP8 + MTP 仅适合短/中上下文；llama.cpp MTP 单流大加速但并发退化。
 
-### 4.5 MTP 长上下文衰减：根因与解决方案（社区调研）
+### 4.5 MTP 对 prefill / TTFT 的影响
+
+> MTP 投机解码主要影响 decode；prefill 侧草稿模型是额外开销，实测影响很小：
+
+| Prompt | Q6_K | Q6_K+MTP | FP8 | FP8+MTP | NVFP4 | NVFP4+MTP |
+|:---|---:|---:|---:|---:|---:|---:|
+| 2.7K prefill | 749 t/s | 706 (-6%) | 1033 | 1064 (+3%) | 915 | 931 (+2%) |
+| 37K prefill | 1576 | 1556 (-1%) | 3671 | 3543 (-3%) | 2417 | 2325 (-4%) |
+| 232K prefill | 768 | 734 (-4%) | 2114 | 2012 (-5%) | 1373 | 1305 (-5%) |
+| 232K TTFT | 302s | 316s | 110s | 115s | 169s | 178s |
+
+**结论：MTP 对 prefill 的影响在 ±5% 以内（TTFT 多出的部分主要是草稿模型 prefill），
+prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生在 decode 侧。**
+
+### 4.6 MTP 长上下文衰减：根因与解决方案（社区调研）
 
 > 对应 vLLM GitHub Issue **#47602**（[链接](https://github.com/vllm-project/vllm/issues/47602)）：
 > *"Native MTP draft acceptance rate decays with total context length"*，与我们实测完全吻合。
@@ -155,7 +169,7 @@
 
 **实践建议**：长上下文场景（>16K）要么用 NVFP4+MTP，要么干脆关闭 MTP；短中程 MTP 收益明显。
 
-### 4.6 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
+### 4.7 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
 
 | 指标 | f16 KV | q8_0 KV | 差异 |
 |:---|---:|---:|---:|
@@ -165,7 +179,7 @@
 
 > **结论：q8_0 KV 以 ~1% 速度代价换取 50% KV 显存，并发从 2 提到 4。**
 
-### 4.7 模型质量参考（量化格式）
+### 4.8 模型质量参考（量化格式）
 
 | 格式 | 精度 | 相对 FP16 损失 |
 |:---|---:|---|
