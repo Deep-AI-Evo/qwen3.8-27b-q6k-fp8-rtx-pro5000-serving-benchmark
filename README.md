@@ -54,11 +54,11 @@
 
 ## 🚀 三种部署方案
 
-| 方案 | 模型 | 权重 | KV cache | 后端 | 部署难度 |
-|---|---|---|---|---|---|---|---|
-| **llama.cpp Q6_K** | Q6_K_XL.gguf + mmproj | 24.1 GiB | q8_0 | 原生 CUDA | ⭐ 双击即用 |
-| **vLLM FP8** | 官方 FP8 | ~29 GB | 默认 | flashinfer | ⭐⭐ 开箱即用 |
-| **vLLM NVFP4** | unsloth NVFP4 | 21.8 GiB | 默认 | marlin(mxfp4) | ⭐⭐⭐⭐ 需 3 个本地补丁 (§8) |
+| 方案 | 模型 | 权重 | KV cache | 后端 | MTP 投机解码 | 部署难度 |
+|:---|:---|---:|:---|:---|:---|:---|
+| **llama.cpp Q6_K** | Q6_K_XL.gguf + mmproj | 24.1 GiB | q8_0 | 原生 CUDA | `draft-mtp`（单流 +56%，长上下文无净损失） | ⭐ 双击即用 |
+| **vLLM FP8** | 官方 FP8 | 28.8 GiB | 默认 | flashinfer | 支持（短中程 +16~35%，长上下文 -42% ⚠️） | ⭐⭐ 开箱即用 |
+| **vLLM NVFP4** | unsloth NVFP4 | 21.8 GiB | 默认 | marlin(mxfp4) | 支持（**全场景加速**，decode 之王） | ⭐⭐⭐⭐ 需 3 个本地补丁（见 [NVFP4 部署记录](#-nvfp4-部署记录windows-已解决)） |
 
 ---
 
