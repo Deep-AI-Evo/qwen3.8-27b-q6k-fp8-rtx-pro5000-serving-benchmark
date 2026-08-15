@@ -271,10 +271,11 @@ python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 
 **单并发 decode（tok/s）**
 
-| 上下文 | DGX Spark NVFP4 | PRO 5000 FP8（无 MTP，本仓库） | PRO 5000 Q6_K（本仓库） | **PRO 6000 FP8+MTP** | **PRO 6000 FP8 无 MTP** | PRO 6000 NVFP4+MTP | PRO 6000 NVFP4 无 MTP | PRO 6000 Q6_K |
-|---|---|---|---|---|---|---|---|---|
-| 短（~1-3K） | ~21 | 37.3 | 39.7 | 95.6 | 52.6 | 100.2 | 58.6 | 55.4 |
-| ~200K | 14.2 | 26.4 | 39.9 | 19.1 | 39.6 | 18.2 | **43.7** | 35.7 |
+| 上下文 | DGX Spark NVFP4+MTP×3 | PRO 5000 FP8 无MTP → +MTP（本仓库） | PRO 5000 NVFP4 无MTP → +MTP（本仓库） | PRO 5000 Q6_K 无MTP → +MTP（本仓库） | PRO 6000 NVFP4 无MTP → +MTP(n=2) | PRO 6000 Q6_K |
+|---|---|---|---|---|---|---|
+| 短（~1-11K） | ~21 | 37.3 → 43.2 | 49.6 → 63.6 | 39.7 → 61.9 | 58.6 → **100.2** | 55.4 |
+| ~148K | — | 26.4 → 15.3 ❌ | 42.1 → **57.8** ✅ | 39.9 → 40.0 | — | — |
+| ~200K | 14.2 | 26.4（无MTP） | 42.1（无MTP） | 39.9 | **43.7** → 18.2 ❌ | 35.7 |
 
 **单并发 prefill ~200K（tok/s）/ TTFT（s）**
 
@@ -291,9 +292,10 @@ python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 | 4 | 44.0 | — | 299.3 | 346.5 | 158.5 |
 | 8 | 77.7 | — | 556.2 | **654.1** | — |
 
-一句话：**PRO 6000 在 prefill/TTFT/并发上全面领先；200K 超长上下文 decode 的正确姿势是
-关 MTP——PRO 6000 NVFP4 无 MTP 43.7 t/s 为三设备全场最高**（PRO 5000 的 llama.cpp Q6_K
-以 39.9 t/s 紧随其后，GDN 混合架构 + llama.cpp 在长上下文 decode 上依然有竞争力）。
+一句话：**PRO 6000 在 prefill/TTFT/并发上全面领先；长上下文 decode 之王是本仓库的
+NVFP4+MTP（n=1, marlin）——57.8 t/s @148K 为三设备实测最高**。注意 MTP 长上下文收益
+因后端/n 值而反转：PRO 6000 的 n=2 配置在 200K 崩盘（关 MTP 才有 43.7 t/s），
+FP8+MTP 在两台设备长上下文均为负优化——用前实测自己的配置（详见本仓库 §4.4/§4.5）。
 
 ---
 
