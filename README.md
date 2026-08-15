@@ -2,6 +2,8 @@
 
 > **llama.cpp (Q6_K) vs vLLM (FP8 vs NVFP4) 三方对比 · TTFT / Prefill / Decode / 并发**
 > 基于 2026-08-15 实机测试，所有数据均可复现（测试脚本附于仓库）
+>
+> 📊 **三设备横向对比请看这里**：[Qwen3.8-27B 跨设备横向对比（DGX Spark / RTX PRO 5000 / RTX PRO 6000）](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010-0078d6)
 ![GPU](https://img.shields.io/badge/GPU-RTX%20PRO%205000%2072GB-76b900)
