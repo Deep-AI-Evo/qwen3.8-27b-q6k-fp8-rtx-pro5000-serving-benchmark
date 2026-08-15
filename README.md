@@ -112,6 +112,43 @@
 
 ---
 
+---
+
+## ⚖️ 跨设备横向对比（DGX Spark / RTX PRO 5000 / RTX PRO 6000）
+
+> 完整版（含部署概览、口径说明、捞针验证）：[Qwen3.8-27B 跨设备横向对比](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
+> ⚠️ 三台设备的 vLLM 版本（0.27.1 / 0.26.0 / 0.21.0）、MTP 设置（×3 / 未开 / ×2）与系统（aarch64 / Windows / x86_64）不完全相同，数量级参考意义大于精确对比。
+
+**单并发 Decode（tok/s）**
+
+| 设备 / 配置 | 短（~1-3K） | ~100K | ~200K |
+|---|---|---|---|
+| DGX Spark · NVFP4 + MTP×3 | ~21 | 16.6 | 14.2 |
+| PRO 5000 · vLLM FP8（无 MTP） | 37.3 | — | 26.4 |
+| PRO 5000 · llama.cpp Q6_K | 39.7 | — | 39.9 |
+| PRO 5000 · vLLM NVFP4 | 49.6 | — | 42.1 |
+| **PRO 6000 · vLLM FP8（无 MTP）** | **52.6** | **45.6** | **39.6** |
+| PRO 6000 · vLLM FP8 + MTP×2 | 95.6 | 28.5 | 19.1 |
+| PRO 6000 · NVFP4（无 MTP） | 58.6 | 49.1 | 43.7 |
+| PRO 6000 · NVFP4 + MTP×2 | 100.2 | 34.8 | 18.2 |
+| PRO 6000 · llama.cpp Q6_K | 55.4 | 44.4 | 35.7 |
+
+**Prefill（tok/s）与 8 并发聚合（tok/s）**
+
+| 设备 / 配置 | Prefill @~200K | Prefill @~30-40K | 8 并发聚合 decode |
+|---|---|---|---|
+| DGX Spark · NVFP4 + MTP×3 | 840 | — | 77.7 |
+| PRO 5000 · vLLM FP8 | 2,114 | 3,671 | — |
+| **PRO 6000 · vLLM FP8 + MTP×2** | **3,869** | **7,100** | **556.2** |
+| PRO 6000 · NVFP4 + MTP×2 | 4,447 | 9,465 | 654.1 |
+| PRO 6000 · llama.cpp Q6_K | 1,676 | 3,117 | — |
+
+**要点**：
+- PRO 6000 FP8 无 MTP 是"省心+长上下文"最优基线（52.6 t/s 起步、200K 仍有 39.6 t/s）；短上下文/高并发则 NVFP4+MTP 称王
+- MTP 收益随上下文衰减，200K 档应关 MTP（详见横向对比文档）
+- DGX Spark 的价值在 128GB 统一内存跑 256K 全上下文 + 安静低功耗桌面形态，纯算力约为 PRO 6000 的 1/4~1/8
+
+---
 ## 🤖 Agent 场景：选谁？
 
 | agent 工作负载特征 | vLLM FP8 | vLLM NVFP4 | llama.cpp Q6_K |
