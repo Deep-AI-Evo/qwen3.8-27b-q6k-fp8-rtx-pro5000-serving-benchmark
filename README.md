@@ -121,6 +121,14 @@
 > 疑似 FP8 路径下 drafter 在长上下文的 KV/SSM 状态处理有缺陷（接受率坍塌，吞吐≈基线一半）；
 > 而 **NVFP4 (marlin) 路径的 MTP 在长上下文依然 +37%**。
 > 结论：**NVFP4 + MTP 是 decode 的终极形态**；FP8 + MTP 仅适合短/中上下文；llama.cpp MTP 单流大加速但并发退化。
+>
+> ⚠️ **跨设备复现警告（2026-08-16 更新）**：PRO 6000 仓库用**完全相同的软件栈**
+> （vLLM 0.26.0 + marlin + n=1 + 相同启动参数）在 Linux 上复测，148K decode 仅 21.4 t/s
+> （-53%），**未能复现本机 +37%**；n 值 / 后端 / vLLM 版本 / 调度参数逐一排除，
+> 且其接受率全程健康（71~100%）——崩盘机制是 MTP 每步开销失控而非接受率坍塌。
+> 差异指向 OS/驱动层（Windows vs Linux）。在更多设备验证前，57.8 t/s @148K 应视为
+> **本机（Windows）单设备结果**，其他平台用前务必自测。详见
+> [横向对比 MTP 专题](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)。
 
 ### 4.5 MTP 对 prefill / TTFT 的影响
 
@@ -161,13 +169,14 @@ prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生�
 **解决方案 / 规避**：
 | 方案 | 效果 | 备注 |
 |---|---|---|
-| **vLLM NVFP4 + MTP** | 长上下文无衰减（+37%） | 本机实测，机制不明（可能 marlin 路径与 flashinfer fp8 路径差异） |
+| **vLLM NVFP4 + MTP** | 长上下文无衰减（+37%） | 本机（Windows）实测；⚠️ PRO 6000（Linux）同栈复测 -53%，指向 OS/驱动层差异，见 §4.4 复现警告 |
 | **llama.cpp draft-mtp（n_max=4）** | 单流 +56%，长上下文持平（**无净损失**） | 本机实测；两并发下反而退化（-38%） |
 | vLLM FP8 + MTP | 短程 +16%，长程 -42% | 长上下文**禁用** MTP 更优 |
 | `num_speculative_tokens_per_batch_size` | 按**批大小**动态调 n | 不是按上下文长度，无法直接解决 |
 | 等待 vLLM 实现按长度分桶开关 | issue #47602 提案中 | 尚未合并 |
 
-**实践建议**：长上下文场景（>16K）要么用 NVFP4+MTP，要么干脆关闭 MTP；短中程 MTP 收益明显。
+**实践建议**：长上下文场景（>16K）在本机（Windows）可用 NVFP4+MTP，其他平台（Linux 实测未复现）
+建议关闭 MTP；短中程 MTP 收益明显。
 
 ### 4.7 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
 
@@ -274,8 +283,10 @@ python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 | 上下文 | DGX Spark NVFP4+MTP×3 | PRO 5000 FP8 无MTP → +MTP（本仓库） | PRO 5000 NVFP4 无MTP → +MTP（本仓库） | PRO 5000 Q6_K 无MTP → +MTP（本仓库） | PRO 6000 NVFP4 无MTP → +MTP(n=2) | PRO 6000 Q6_K |
 |---|---|---|---|---|---|---|
 | 短（~1-11K） | ~21 | 37.3 → 43.2 | 49.6 → 63.6 | 39.7 → 61.9 | 58.6 → **100.2** | 55.4 |
-| ~148K | — | 26.4 → 15.3 ❌ | 42.1 → **57.8** ✅ | 39.9 → 40.0 | — | — |
+| ~148K | — | 26.4 → 15.3 ❌ | 42.1 → **57.8** ✅（PRO 6000 同栈复测仅 21.4 ❌，见 §4.4） | 39.9 → 40.0 | ≈46* → 21.4 ❌ | — |
 | ~200K | 14.2 | 26.4（无MTP） | 42.1（无MTP） | 39.9 | **43.7** → 18.2 ❌ | 35.7 |
+
+\* PRO 6000 无 MTP 148K 未单测，为 100K/200K 插值。
 
 **单并发 prefill ~200K（tok/s）/ TTFT（s）**
 
@@ -294,9 +305,9 @@ python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 
 > 注：PRO 5000 仅测到 2 并发（72GB 卡，4 并发需降低单槽上下文）；PRO 6000 96GB 可到 8 并发。
 
-一句话：**PRO 6000 在 prefill/TTFT/并发上全面领先；长上下文 decode 之王是本仓库的
-NVFP4+MTP（n=1, marlin）——57.8 t/s @148K 为三设备实测最高**。注意 MTP 长上下文收益
-因后端/n 值而反转：PRO 6000 的 n=2 配置在 200K 崩盘（关 MTP 才有 43.7 t/s），
+一句话：**PRO 6000 在 prefill/TTFT/并发上全面领先；长上下文 decode 的最高报告值是本仓库的
+NVFP4+MTP 57.8 t/s @148K（Windows），但 PRO 6000（Linux）用完全相同软件栈复测仅 21.4 t/s——
+n 值/后端/版本/调度参数逐一排除、接受率全程健康，差异指向 OS/驱动层**。
 FP8+MTP 在两台设备长上下文均为负优化——用前实测自己的配置（详见本仓库 §4.4/§4.5）。
 
 ---
