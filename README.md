@@ -190,6 +190,31 @@ prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生�
 
 > **结论：q8_0 KV 以 ~1% 速度代价换取 50% KV 显存，并发从 2 提到 4。**
 
+### 4.9 Qwen3.8 NVFP4 GGUF 版本对比（llama.cpp FP4 路径）
+
+> 来源: [esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF](https://huggingface.co/esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF)
+>（unsloth NVFP4 的 GGUF 转换，含内嵌 MTP 头；llama.cpp b9692 原生 FP4 张量核）
+
+| 指标 | **VERY-HIGH** (18.3 GiB) | **ORIG** (30.9 GiB) |
+|:---|---:|---:|
+| prefill 2K | **3,559 t/s** | 2,877 t/s |
+| prefill 200K | **1,026 t/s** | 985 t/s |
+| decode ~2K | **56.7 t/s** | 35.0 t/s |
+| decode 200K | **54.9 t/s** | 34.8 t/s |
+| decode ~11K +MTP | **68.1 t/s** 🏆 | 54.7 t/s |
+| decode 200K +MTP | 42.2 t/s | 36.8 t/s |
+| 两并发 avg +MTP | **35.6 t/s** | 21.3 t/s |
+| 两并发 agg +MTP | **66.1 t/s** | 33.9 t/s |
+| 部署配置 | 4×256K ✅ | 2×256K（4×256K 显存超限 ⚠️） |
+
+**结论**：
+- **VERY-HIGH 全面胜出**：decode 快 30-60%、prefill 快 24%、显存少 12.6 GiB、并发翻倍
+- ORIG（30.9 GiB ≈ 9 bits/param）权重更大，唯一潜在优势是保真度更高（未做质量评测）
+- **VERY-HIGH + MTP 单流 68.1 t/s 是全部方案（含 vLLM NVFP4+MTP 63.6）中最快的**
+- 注意：ORIG 4×256K 时显存 99.2% 超限导致速度暴跌（8.7 t/s），必须 2×256K
+
+**部署**：`scripts/start_qwen38_nvfp4_gguf_mtp.bat`（VERY-HIGH）/ `scripts/start_qwen38_nvfp4_gguf_orig.bat`（ORIG）
+
 ### 4.8 模型质量参考（量化格式）
 
 | 格式 | 精度 | 相对 FP16 损失 |

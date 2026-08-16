@@ -184,6 +184,26 @@ Acceptance rate (position-1): 93.5% @2K → 72.1% @30K; overall average 64.9% �
 
 > **q8_0 KV trades ~1% speed for 50% KV memory — concurrency 2→4.**
 
+### 4.9 Qwen3.8 NVFP4 GGUF Version Comparison (llama.cpp FP4 path)
+
+> Source: [esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF](https://huggingface.co/esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF)
+> (unsloth NVFP4 converted to GGUF with embedded MTP head; llama.cpp b9692 native FP4 tensor cores)
+
+| Metric | **VERY-HIGH** (18.3 GiB) | **ORIG** (30.9 GiB) |
+|:---|---:|---:|
+| prefill 2K | **3,559 t/s** | 2,877 t/s |
+| prefill 200K | **1,026 t/s** | 985 t/s |
+| decode ~2K | **56.7 t/s** | 35.0 t/s |
+| decode 200K | **54.9 t/s** | 34.8 t/s |
+| decode ~11K +MTP | **68.1 t/s** 🏆 | 54.7 t/s |
+| decode 200K +MTP | 42.2 t/s | 36.8 t/s |
+| 2-way avg +MTP | **35.6 t/s** | 21.3 t/s |
+| 2-way agg +MTP | **66.1 t/s** | 33.9 t/s |
+| Deployment | 4×256K ✅ | 2×256K (4×256K exceeds VRAM ⚠️) |
+
+**VERY-HIGH wins everywhere**: decode 30-60% faster, 24% faster prefill, 12.6 GiB less VRAM, double concurrency.
+ORIG's only edge is potentially higher fidelity (unverified). **VERY-HIGH + MTP single-stream 68.1 t/s is the fastest of all schemes tested (incl. vLLM NVFP4+MTP at 63.6).**
+
 ### 4.8 Quantization Quality Reference
 
 | Format | Precision | Loss vs FP16 |
