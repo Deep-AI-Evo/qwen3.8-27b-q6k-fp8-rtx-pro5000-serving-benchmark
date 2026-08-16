@@ -1,5 +1,27 @@
 @echo off
 chcp 65001 >nul
+REM ============================================================
+REM  限制 GPU 最大功率为 270W（需管理员权限，自动提权）
+REM ============================================================
+net session >nul 2>&1
+if errorlevel 1 (
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    if errorlevel 1 (
+        echo  [Power] 错误: 提权失败，无法限制 GPU 功率，中止启动
+        pause
+        exit /b 1
+    )
+    exit /b
+)
+nvidia-smi -pl 270 >nul 2>&1
+if %errorlevel% equ 0 (
+    echo  [Power] OK: 已限制最大功率为 270W
+) else (
+    echo  [Power] 错误: 设置 270W 功率限制失败，为避免过热中止启动
+    pause
+    exit /b 1
+)
+echo.
 set LLAMA_DIR=H:\llamacpp\llama-b9692-bin-win-cuda-13.3-x64
 set MODEL=H:\models\Qwen3.8-27B-NVFP4-MTP-VERY-HIGH.gguf
 set MMPROJ=H:\models\mmproj-Qwen3.8-27B-BF16.gguf
