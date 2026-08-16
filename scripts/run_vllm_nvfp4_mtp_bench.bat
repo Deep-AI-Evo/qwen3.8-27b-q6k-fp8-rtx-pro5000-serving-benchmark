@@ -34,6 +34,8 @@ REM ============================================================
   --gpu-memory-utilization 0.90 ^
   --max-num-seqs 4 ^
   --enable-prefix-caching ^
+  --tool-call-parser qwen3_xml ^
+  --enable-auto-tool-choice ^
   --speculative-config "{\"num_speculative_tokens\": 1, \"method\": \"mtp\"}" ^
   --trust-remote-code
 

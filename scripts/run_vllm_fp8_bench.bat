@@ -32,6 +32,8 @@ REM ============================================================
   --gpu-memory-utilization 0.90 ^
   --max-num-seqs 2 ^
   --enable-prefix-caching ^
+  --tool-call-parser qwen3_xml ^
+  --enable-auto-tool-choice ^
   --trust-remote-code
 
 pause
