@@ -34,7 +34,7 @@ REM ============================================================
   --gpu-memory-utilization 0.90 ^
   --max-num-seqs 4 ^
   --enable-prefix-caching ^
-  --kv-cache-dtype fp8_e5m2 ^
+  --kv-cache-dtype fp8_e4m3 ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
   --reasoning-parser qwen3 ^
