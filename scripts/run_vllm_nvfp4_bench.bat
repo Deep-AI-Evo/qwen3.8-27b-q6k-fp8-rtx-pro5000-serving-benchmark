@@ -2,7 +2,7 @@
 chcp 65001 >nul
 set VENV=H:\vllm-win
 set MODEL_DIR=H:\models\Qwen3.8-27B-NVFP4
-set PORT=12346
+set PORT=12345
 set VLLM_TEST_FORCE_FP8_MARLIN=1
 set MSVC=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207
 set SDK=C:\Program Files (x86)\Windows Kits\10
