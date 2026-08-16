@@ -34,6 +34,7 @@ REM ============================================================
   --enable-prefix-caching ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
+  --reasoning-parser qwen3 ^
   --trust-remote-code
 
 pause
