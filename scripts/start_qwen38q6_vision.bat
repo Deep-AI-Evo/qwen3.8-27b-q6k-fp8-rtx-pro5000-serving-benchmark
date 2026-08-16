@@ -32,7 +32,9 @@ echo.
   --no-mmap ^
   --cache-type-k q8_0 ^
   --cache-type-v q8_0 ^
-  --temp 0.2 ^
+  --temp 1.0 ^
+  --presence-penalty 0.0 ^
+  --repeat-penalty 1.0 ^
   --top-p 0.95 ^
   --top-k 20 ^
   --min-p 0.00 ^

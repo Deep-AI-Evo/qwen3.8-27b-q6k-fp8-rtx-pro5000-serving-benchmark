@@ -15,6 +15,16 @@ set CUDA_PATH=%CUDA_HOME%
 set CUDA_LIB_PATH=%CUDA_HOME%\lib
 set PATH=%CUDA_HOME%\bin;%CUDA_HOME%\bin\x86_64;%PATH%
 
+REM ============================================================
+REM  Qwen3.8 官方推荐参数 (思考模式 Thinking Mode):
+REM    temperature=1.0, top_p=0.95, top_k=20, min_p=0.0
+REM    presence_penalty=0.0, repetition_penalty=1.0
+REM  思考模式默认开启 (enable_thinking=True, preserve_thinking=True)
+REM  vLLM 采样参数为请求级: 客户端请求时传 sampling params
+REM  建议客户端携带:
+REM    {"temperature":1.0,"top_p":0.95,"top_k":20,"min_p":0.0,
+REM     "presence_penalty":0.0,"repetition_penalty":1.0}
+REM ============================================================
 "%VENV%\Scripts\python.exe" -m vllm.entrypoints.openai.api_server ^
   --model "%MODEL_DIR%" ^
   --served-model-name Qwen3.8-27B-NVFP4 ^

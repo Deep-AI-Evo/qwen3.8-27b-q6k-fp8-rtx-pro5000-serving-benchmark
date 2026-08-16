@@ -1,9 +1,8 @@
 @echo off
 chcp 65001 >nul
 set VENV=H:\vllm-win
-set MODEL_DIR=H:\models\Qwen3.8-27B-NVFP4
+set MODEL_DIR=H:\models\Qwen3.8-27B-FP8
 set PORT=12346
-set VLLM_TEST_FORCE_FP8_MARLIN=1
 set MSVC=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207
 set SDK=C:\Program Files (x86)\Windows Kits\10
 set SDKV=10.0.26100.0
@@ -27,13 +26,11 @@ REM     "presence_penalty":0.0,"repetition_penalty":1.0}
 REM ============================================================
 "%VENV%\Scripts\python.exe" -m vllm.entrypoints.openai.api_server ^
   --model "%MODEL_DIR%" ^
-  --served-model-name Qwen3.8-27B-NVFP4-MTP ^
-  --linear-backend marlin ^
+  --served-model-name Qwen3.8-27B-FP8 ^
   --host 0.0.0.0 ^
   --port %PORT% ^
   --max-model-len 262144 ^
   --gpu-memory-utilization 0.90 ^
-  --max-num-seqs 4 ^
+  --max-num-seqs 2 ^
   --enable-prefix-caching ^
-  --speculative-config "{\"num_speculative_tokens\": 1, \"method\": \"mtp\"}" ^
   --trust-remote-code
