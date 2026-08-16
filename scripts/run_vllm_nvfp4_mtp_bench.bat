@@ -37,6 +37,7 @@ REM ============================================================
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
   --enable-log-requests ^
+  --reasoning-parser qwen3 ^
   --speculative-config "{\"num_speculative_tokens\": 1, \"method\": \"mtp\"}" ^
   --trust-remote-code
 
