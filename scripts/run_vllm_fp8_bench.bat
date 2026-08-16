@@ -34,6 +34,7 @@ REM ============================================================
   --enable-prefix-caching ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
+  --default-chat-template-kwargs "{\"enable_thinking\": false}" ^
   --trust-remote-code
 
 pause
