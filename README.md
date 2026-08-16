@@ -1,5 +1,7 @@
 # ⚡ Qwen3.8-27B 部署方案实测报告
 
+> 🌐 **English** | [Switch to English](README.en.md)
+
 > **llama.cpp (Q6_K) vs vLLM (FP8 vs NVFP4) 三方对比 · TTFT / Prefill / Decode / 并发**
 > 基于 2026-08-15 实机测试，所有数据均可复现（测试脚本附于仓库）
 >
@@ -281,7 +283,7 @@ python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 **单并发 decode（tok/s）**
 
 | 上下文 | DGX Spark NVFP4+MTP×3 | PRO 5000 FP8 无MTP → +MTP（本仓库） | PRO 5000 NVFP4 无MTP → +MTP（本仓库） | PRO 5000 Q6_K 无MTP → +MTP（本仓库） | PRO 6000 NVFP4 无MTP → +MTP(n=2) | PRO 6000 Q6_K |
-|---|---|---|---|---|---|---|
+|:---|---:|---:|---:|---:|---:|---:|
 | 短（~1-11K） | ~21 | 37.3 → 43.2 | 49.6 → 63.6 | 39.7 → 61.9 | 58.6 → **100.2** | 55.4 |
 | ~148K | — | 26.4 → 15.3 ❌ | 42.1 → **57.8** ✅（PRO 6000 同栈复测仅 21.4 ❌，见 §4.4） | 39.9 → 40.0 | ≈46* → 21.4 ❌ | — |
 | ~200K | 14.2 | 26.4（无MTP） | 42.1（无MTP） | 39.9 | **43.7** → 18.2 ❌ | 35.7 |
