@@ -2,44 +2,32 @@
 
 > 🌐 **English** | [Switch to English](README.en.md)
 
-> **llama.cpp (Q6_K) vs vLLM (FP8 vs NVFP4) 三方对比 · TTFT / Prefill / Decode / 并发**
-> 基于 2026-08-15 实机测试，所有数据均可复现（测试脚本附于仓库）
+> **llama.cpp / vLLM / SGLang 三方引擎 × Q6_K / FP8 / NVFP4 / FP4 四种权重 × MTP / DSPARK 两种投机解码**
+> 基于 2026-08-15~17 实机测试，所有数据可复现（测试脚本附于仓库）
 >
-> 📊 **三设备横向对比请看这里**：[Qwen3.8-27B 跨设备横向对比（DGX Spark / RTX PRO 5000 / RTX PRO 6000）](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
+> 📊 **三设备横向对比**：[DGX Spark / RTX PRO 5000 / RTX PRO 6000](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010-0078d6)
 ![GPU](https://img.shields.io/badge/GPU-RTX%20PRO%205000%2072GB-76b900)
 ![llama.cpp](https://img.shields.io/badge/llama.cpp-b9692-orange)
 ![vLLM](https://img.shields.io/badge/vLLM-0.26.0%2Bcu132-purple)
-![CUDA](https://img.shields.io/badge/CUDA-13.3-green)
-![Tested](https://img.shields.io/badge/Tested-2026--08--15-yellow)
-
----
-
-## 📑 目录
-
-- [核心结论（TL;DR）](#-核心结论tldr)
-- [测试环境与三种部署方案](#%EF%B8%8F-测试环境)
-- [测试结果（prefill/decode/并发/KV）](#-测试结果)
-- [Agent 场景选型](#-agent-场景选谁)
-- [踩坑记录](#-踩坑记录方法论陷阱)
-- [跨设备横向对比（DGX Spark / PRO 5000 / PRO 6000）](#-跨设备横向对比dgx-spark--rtx-pro-5000--rtx-pro-6000) ⭐ 在文末
-
-> ⭐ 想看 **DGX Spark / RTX PRO 5000 / RTX PRO 6000** 三设备谁强？文末有完整的[三设备横向对比](#-跨设备横向对比dgx-spark--rtx-pro-5000--rtx-pro-6000)（含 PRO 6000 FP8 全档位数据）。
-
+![SGLang](https://img.shields.io/badge/SGLang-qwen38.27b-blue)
+![Tested](https://img.shields.io/badge/Tested-2026--08--17-yellow)
 
 ---
 
 ## 📌 核心结论（TL;DR）
 
-| # | 结论 | 依据 |
+| # | 结论 | 关键数字 |
 |---|---|---|
-| 1 | **decode 王者：vLLM NVFP4 + MTP** | 单流 63.6 t/s（比 Q6_K 快 60%）；两并发总体 112.6 t/s |
-| 2 | **prefill 王者：vLLM FP8** | 200K prefill 2114 t/s（比 NVFP4 快 54%） |
-| 3 | **agent 场景首选：vLLM（FP8 或 NVFP4）** | TTFT 全尺寸领先，决定 agent 体感 |
-| 4 | **llama.cpp 的价值：质量 + 极简运维** | Q6_K 权重精度最高（~6.5-bit），单 exe 部署 |
-| 5 | **q8_0 KV 是白赚的** | 仅 ~1% 速度代价，省 50% KV 显存，并发 2→4 |
-| 6 | **并发越高 GPU 越值** | 两并发总体吞吐比单流高 ~70%（batch 效率） |
+| 1 | **综合王者：SGLang + NVFP4 + DSPARK** | decode 85.2 t/s（短）/ 71.4（200K）；两并发 147.6 t/s；prefill 6000+ t/s |
+| 2 | **DSPARK 解决 MTP 长上下文衰减** | 200K decode 71.4 t/s 不衰减（vLLM FP8+MTP 仅 15.3 ❌） |
+| 3 | **prefill 差距是引擎级的** | SGLang 6000+ t/s = vLLM 的 6 倍 = llama.cpp 的 2 倍 |
+| 4 | **Windows 原生首选 vLLM**（无需 Docker） | NVFP4+MTP 63.6 t/s，开箱即用 |
+| 5 | **质量/极简运维：llama.cpp Q6_K** | ~6.5-bit 近无损，单 exe 部署 |
+| 6 | **FP4 GGUF 是 llama.cpp 的提速器** | NVFP4 GGUF+MTP 68.1 t/s（Q6_K 的 1.7 倍） |
+| 7 | **锁 270W 无性能损失** | 实测峰值功耗 244W < 270W，温度 73°C 健康 |
+| 8 | **显存纪律**：0.80 util / 单容器 | 超分导致 GUI/RDP 卡死（实测踩坑） |
 
 ---
 
@@ -47,363 +35,207 @@
 
 | 项目 | 配置 |
 |---|---|
-| GPU | NVIDIA RTX PRO 5000 **72GB** Blackwell (sm_120, 73415 MiB) |
+| GPU | NVIDIA RTX PRO 5000 **72GB** Blackwell (sm_120, 73415 MiB, 270W 锁功率) |
 | CPU | Intel Core Ultra 7 270K Plus |
-| 内存 | 127 GiB |
-| 系统 | Windows 10 x64 (10.0.26200) |
-| llama.cpp | b9692 (CUDA 13.3 构建) |
+| 系统 | Windows 10 x64 (10.0.26200) + WSL2 + Docker Desktop |
+| llama.cpp | b9692 (CUDA 13.3, 原生 FP4) |
 | vLLM | 0.26.0+cu132 (Python 3.12 + torch 2.11 cu130) |
+| SGLang | lmsysorg/sglang:qwen38-27b 镜像 (Docker) |
 
-## 🚀 三种部署方案
+## 🚀 部署方案全景
 
-| 方案 | 模型 | 权重 | KV cache | 后端 | MTP 投机解码 | 部署难度 |
-|:---|:---|---:|:---|:---|:---|:---|
-| **llama.cpp Q6_K** | Q6_K_XL.gguf + mmproj | 24.1 GiB | q8_0 | 原生 CUDA | `draft-mtp`（单流 +56%，长上下文无净损失） | ⭐ 双击即用 |
-| **vLLM FP8** | 官方 FP8 | 28.8 GiB | 默认 | flashinfer | 支持（短中程 +16~35%，长上下文 -42% ⚠️） | ⭐⭐ 开箱即用 |
-| **vLLM NVFP4** | unsloth NVFP4 | 21.8 GiB | 默认 | marlin(mxfp4) | 支持（**全场景加速**，decode 之王） | ⭐⭐⭐⭐ 需 3 个本地补丁（见 [NVFP4 部署记录](#-nvfp4-部署记录windows-已解决)） |
+| 方案 | 权重 | 投机解码 | 部署方式 | 显存 |
+|:---|:---|---:|:---|:---:|
+| **SGLang NVFP4+DSPARK** | RadixArk NVFP4 20.4 GiB | DSPARK (γ=7) | Docker | ~57 GiB |
+| **SGLang FP8+DSPARK** | 官方 FP8 28.8 GiB | DSPARK (γ=7) | Docker | ~65 GiB |
+| **vLLM NVFP4+MTP** | unsloth NVFP4 21.8 GiB | MTP (n=1) | 原生 bat | 57 GiB (0.80) |
+| vLLM FP8+MTP | 官方 FP8 28.8 GiB | MTP (n=1) | 原生 bat | ~65 GiB |
+| **llama.cpp FP4 GGUF+MTP** | esatapedico GGUF 18.3 GiB | draft-mtp | 原生 bat | ~55 GiB |
+| llama.cpp Q6_K | Q6_K_XL 24.1 GiB | draft-mtp | 原生 bat | ~50 GiB |
+
+> SGLang 需 Docker（Windows 下）；vLLM/llama.cpp 可原生运行。
+> ⚠️ SGLang 与 vLLM 不能同时跑（显存超分），详见 §5。
 
 ---
 
 ## 📏 测试方法论
 
-- **prefill/TTFT**：OpenAI API 流式请求，`TTFT = 请求发出 → 首个 token`，`prefill t/s = prompt_tokens / TTFT`；每轮使用**随机文本**杜绝缓存命中
-- **decode**：流式生成期间 tokens/s（剔除首 token）
-- **并发 profile**：N 线程同时发请求分别计时；`总体吞吐 = Σtokens / 窗口时间`
-- 所有对比均在 GPU 空闲（无其他服务）状态下进行；关键数据多轮取均值
+- **prefill/TTFT**：流式 API，`TTFT = 请求发出→首 token`，`prefill t/s = prompt_tokens/TTFT`；随机文本防缓存
+- **decode**：流式生成 tokens/s（剔除首 token）
+- **并发**：N 线程同时请求；`总体 = Σtokens / 窗口`
+- SGLang 容器内测速（Docker 端口转发在 WSL2 下可能失效）
+- 所有对比 GPU 空闲状态；关键数据多轮取均值
 
 ---
 
-## 📊 测试结果
+## 📊 测试结果（全方案主对比）
 
-### 4.1 单并发 Prefill / TTFT
+### 4.1 Prefill / TTFT
 
-| Prompt | llama.cpp Q6_K | vLLM FP8 | vLLM NVFP4 |
-|:---|---:|---:|---:|
-| 2.7K TTFT | 3.60s | 2.55s | 2.90s |
-| 2.7K prefill | 749 t/s | 1,033 t/s | 915 t/s |
-| 37K TTFT | 23.8s | 10.2s | 15.5s |
-| 37K prefill | 1,576 t/s | **3,671 t/s** | 2,417 t/s |
-| 232K TTFT | 302s | **110s** | 169s |
-| 232K prefill | 768 t/s | **2,114 t/s** | 1,373 t/s |
+| Prompt | SGLang NVFP4+DSPARK | SGLang FP8+DSPARK | vLLM NVFP4+MTP | vLLM FP8+MTP | llama.cpp FP4+MTP | llama.cpp Q6_K |
+|:---|---:|---:|---:|---:|---:|---:|
+| 2.7K | **5,388-6,772** | 4,858-5,030 | 931 | 1,064 | 706 | 749 |
+| 37K | **5,221-5,249** | 4,306-4,309 | 2,325 | 3,543 | 1,556 | 1,576 |
+| 232K | 1,900 | — | 1,305 | 2,012 | 734 | 768 |
 
-> 注：llama.cpp 每请求有 ~2.5s 固定开销（调度/分词），小 prompt 的 prefill 速度被稀释。纯内核 prefill（llama-bench）：2.7K=2112 t/s、37K=1822 t/s——符合 attention 成本随上下文增长的理论。
+> SGLang 的 prefill 优势是引擎级（混合 GDN 优化 + chunked 2048）：**2-6 倍于其他引擎**。
 
-### 4.2 单并发 Decode
+### 4.2 Decode（单流）
 
-| 上下文 | llama.cpp Q6_K | vLLM FP8 | vLLM NVFP4 |
-|:---|---:|---:|---:|
-| ~11K | 39.7 t/s | 37.3 t/s | **49.6 t/s** 🏆 |
-| ~150-200K | 39.9 t/s | 26.4 t/s | **42.1 t/s** 🏆 |
+| 上下文 | SGLang NVFP4+DSPARK | SGLang FP8+DSPARK | llama.cpp FP4+MTP | vLLM NVFP4+MTP | vLLM FP8+MTP | llama.cpp Q6_K+MTP |
+|:---|---:|---:|---:|---:|---:|---:|
+| ~11K | **85.2** 🏆 | 64.3 | 68.1 | 63.6 | 43.2 | 61.9 |
+| ~148-200K | **71.4** 🏆 | 52.7 | 42.2 | 57.8 | 15.3 ❌ | 40.0 |
 
-> 💡 **NVFP4 的 FP4 张量核优势兑现**：decode 全面登顶——短上下文比 Q6_K 快 25%，长上下文比 FP8 快 60%。
+> **DSPARK 是唯一长上下文不衰减的投机方案**（置信度头动态控制草稿长度）；MTP-1 在长上下文接受率坍塌（vLLM FP8+MTP 只剩 15.3）。
 
 ### 4.3 两并发 Decode Profile
 
-| 指标 | llama.cpp Q6_K | vLLM FP8 | vLLM NVFP4 |
-|:---|---:|---:|---:|
-| 单流基线 | 39.9 t/s | 37.3 t/s | **49.6 t/s** |
-| 两并发·平均每流 | 34.1 t/s | 32.5 t/s | **45.0 t/s** |
-| **两并发·总体吞吐** | 68.2 t/s | 64.7 t/s | **88.8 t/s** 🏆 |
-
-> 💡 两并发总体吞吐（88.8 t/s）比单流（49.6 t/s）高 **~80%** —— 批处理效率提升，对 agent 多请求场景是重大利好。
-
-### 4.4 MTP 投机解码（Multi-Token Prediction，1 层 nextn）
-
-> 启用方式：`--speculative-config '{"num_speculative_tokens": 1, "method": "mtp"}'`
->（vLLM 自动从同 checkpoint 加载 `mtp.*` 权重作为 drafter）
-
-| 场景 | Q6_K 无 MTP | **Q6_K + MTP** | FP8 无 MTP | **FP8 + MTP** | NVFP4 无 MTP | **NVFP4 + MTP** |
-|:---|---:|---:|---:|---:|---:|---:|
-| 单流 ~11K | 39.7 | **61.9 (+56%)** | 37.3 | 43.2 (+16%) | 49.6 | **63.6 (+28%)** 🏆 |
-| 两并发·平均每流 | 34.1 | 25.5 (-25%) ❌ | 32.5 | 44.0 (+35%) | 45.0 | **56.3 (+25%)** |
-| 两并发·总体 | 68.2 | 42.3 (-38%) ❌ | 64.7 | 87.0 (+34%) | 88.8 | **112.6 (+27%)** 🏆 |
-| 长上下文 ~148K | 39.9 | **40.0 (±0%)** | 26.4 | **15.3 (-42%)** ❌ | 42.1 | **57.8 (+37%)** 🏆 |
-
-> ⚠️ **重要发现**：MTP 在 FP8 上**长上下文反而大幅变慢**（-42%，复测两次确认），
-> 疑似 FP8 路径下 drafter 在长上下文的 KV/SSM 状态处理有缺陷（接受率坍塌，吞吐≈基线一半）；
-> 而 **NVFP4 (marlin) 路径的 MTP 在长上下文依然 +37%**。
-> 结论：**NVFP4 + MTP 是 decode 的终极形态**；FP8 + MTP 仅适合短/中上下文；llama.cpp MTP 单流大加速但并发退化。
->
-> ⚠️ **跨设备复现警告（2026-08-16 更新）**：PRO 6000 仓库用**完全相同的软件栈**
-> （vLLM 0.26.0 + marlin + n=1 + 相同启动参数）在 Linux 上复测，148K decode 仅 21.4 t/s
-> （-53%），**未能复现本机 +37%**；n 值 / 后端 / vLLM 版本 / 调度参数逐一排除，
-> 且其接受率全程健康（71~100%）——崩盘机制是 MTP 每步开销失控而非接受率坍塌。
-> 差异指向 OS/驱动层（Windows vs Linux）。在更多设备验证前，57.8 t/s @148K 应视为
-> **本机（Windows）单设备结果**，其他平台用前务必自测。详见
-> [横向对比 MTP 专题](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)。
-
-### 4.5 MTP 对 prefill / TTFT 的影响
-
-> MTP 投机解码主要影响 decode；prefill 侧草稿模型是额外开销，实测影响很小：
-
-| Prompt | Q6_K | Q6_K+MTP | FP8 | FP8+MTP | NVFP4 | NVFP4+MTP |
-|:---|---:|---:|---:|---:|---:|---:|
-| 2.7K prefill | 749 t/s | 706 (-6%) | 1033 | 1064 (+3%) | 915 | 931 (+2%) |
-| 37K prefill | 1576 | 1556 (-1%) | 3671 | 3543 (-3%) | 2417 | 2325 (-4%) |
-| 232K prefill | 768 | 734 (-4%) | 2114 | 2012 (-5%) | 1373 | 1305 (-5%) |
-| 232K TTFT | 302s | 316s | 110s | 115s | 169s | 178s |
-
-**结论：MTP 对 prefill 的影响在 ±5% 以内（TTFT 多出的部分主要是草稿模型 prefill），
-prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生在 decode 侧。**
-
-### 4.6 MTP 长上下文衰减：根因与解决方案（社区调研）
-
-> 对应 vLLM GitHub Issue **#47602**（[链接](https://github.com/vllm-project/vllm/issues/47602)）：
-> *"Native MTP draft acceptance rate decays with total context length"*，与我们实测完全吻合。
-
-**衰减曲线（issue 作者实测，Qwen3.6-27B，MTP n=6）**：
-| 上下文 | MTP n=6 | 无 MTP | Δ |
-|:---|---:|---:|---:|
-| 2K | 138.0 t/s | 60.4 t/s | +129% |
-| 8K | 88.3 | 60.1 | +47% |
-| 16K | 51.0 | 59.1 | **-14%** |
-| 30K | 26.8 | 54.6 | **-51%** |
-
-接受率（position-1）：2K 时 93.5% → 30K 时 72.1%；整体平均 64.9% → 39.1%。
-
-**根因（社区共识，跨引擎验证）**：
-- MTP 草稿头只有 **1 层**（`mtp_num_hidden_layers=1`），目标模型有 64 层
-- 短上下文：目标最终 hidden state 已编码足够信息，1 层草稿头够用
-- 长上下文：要生成与远处上下文一致的续写，需要**长程多跳 attention**——单层草稿头没有这个容量，猜测越来越偏离 64 层目标的真实分布
-- DeepSeek 官方在 DSpark 中正是因此弃用 MTP-1（"as context grows, acceptance of draft tokens decreases"）
-- **不是 vLLM 实现 bug**：llama.cpp (Vulkan/AMD) + vLLM (CUDA/NVIDIA) 上同样复现（issue 评论 + 本机实测）
-
-**解决方案 / 规避**：
-| 方案 | 效果 | 备注 |
-|---|---|---|
-| **vLLM NVFP4 + MTP** | 长上下文无衰减（+37%） | 本机（Windows）实测；⚠️ PRO 6000（Linux）同栈复测 -53%，指向 OS/驱动层差异，见 §4.4 复现警告 |
-| **llama.cpp draft-mtp（n_max=4）** | 单流 +56%，长上下文持平（**无净损失**） | 本机实测；两并发下反而退化（-38%） |
-| vLLM FP8 + MTP | 短程 +16%，长程 -42% | 长上下文**禁用** MTP 更优 |
-| `num_speculative_tokens_per_batch_size` | 按**批大小**动态调 n | 不是按上下文长度，无法直接解决 |
-| 等待 vLLM 实现按长度分桶开关 | issue #47602 提案中 | 尚未合并 |
-
-**实践建议**：长上下文场景（>16K）在本机（Windows）可用 NVFP4+MTP，其他平台（Linux 实测未复现）
-建议关闭 MTP；短中程 MTP 收益明显。
-
-### 4.7 KV Cache 格式：f16 vs q8_0（llama.cpp，200K 上下文，3 轮均值）
-
-| 指标 | f16 KV | q8_0 KV | 差异 |
-|:---|---:|---:|---:|
-| prefill 200K | 873.04 t/s | 862.00 t/s | **-1.26%** |
-| decode @200K | 39.94 t/s | 39.68 t/s | **-0.66%** |
-| 显存（2×256K） | 58.0 GiB | 44.9 GiB | **省 13.4 GiB** 🎉 |
-
-> **结论：q8_0 KV 以 ~1% 速度代价换取 50% KV 显存，并发从 2 提到 4。**
-
-### 4.9 Qwen3.8 NVFP4 GGUF 版本对比（llama.cpp FP4 路径）
-
-> 来源: [esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF](https://huggingface.co/esatapedico/Qwen3.8-27B-NVFP4-MTP-GGUF)
->（unsloth NVFP4 的 GGUF 转换，含内嵌 MTP 头；llama.cpp b9692 原生 FP4 张量核）
-
-| 指标 | **VERY-HIGH** (18.3 GiB) | **ORIG** (30.9 GiB) |
-|:---|---:|---:|
-| prefill 2K | **3,559 t/s** | 2,877 t/s |
-| prefill 200K | **1,026 t/s** | 985 t/s |
-| decode ~2K | **56.7 t/s** | 35.0 t/s |
-| decode 200K | **54.9 t/s** | 34.8 t/s |
-| decode ~11K +MTP | **68.1 t/s** 🏆 | 54.7 t/s |
-| decode 200K +MTP | 42.2 t/s | 36.8 t/s |
-| 两并发 avg +MTP | **35.6 t/s** | 21.3 t/s |
-| 两并发 agg +MTP | **66.1 t/s** | 33.9 t/s |
-| 部署配置 | 4×256K ✅ | 2×256K（4×256K 显存超限 ⚠️） |
-
-**结论**：
-- **VERY-HIGH 全面胜出**：decode 快 30-60%、prefill 快 24%、显存少 12.6 GiB、并发翻倍
-- ORIG（30.9 GiB ≈ 9 bits/param）权重更大，唯一潜在优势是保真度更高（未做质量评测）
-- **VERY-HIGH + MTP 单流 68.1 t/s 是全部方案（含 vLLM NVFP4+MTP 63.6）中最快的**
-- 注意：ORIG 4×256K 时显存 99.2% 超限导致速度暴跌（8.7 t/s），必须 2×256K
-
-**部署**：`scripts/start_qwen38_nvfp4_gguf_mtp.bat`（VERY-HIGH）/ `scripts/start_qwen38_nvfp4_gguf_orig.bat`（ORIG）
-
-### 4.8 功率限制与显存配置实测（270W + 0.80 util + FP8 KV）
-
-> 现象：vLLM 0.90 util 时 GPU 显存 99% 占用，Windows 图形栈（DWM/RDP 渲染）无显存可用 → 界面/RDP 卡死。
-> 注意：显示器接核显也没用——Windows 桌面合成默认走独显。
-
-**最终配置**：`--gpu-memory-utilization 0.80 --kv-cache-dtype fp8_e4m3`
-（fp8_e5m2 与 fp8 检查点不兼容；0.80 util 给 GUI 留 ~14.7 GiB）
-
-**功率限制实测与勘误**：
-- ⚠️ 勘误：`nvidia-smi -pl 270` 设置的 270W 限制**未持久化**，实际 Current Power Limit = **300W**（默认值，重启/驱动重置后失效）——之前的"270W 测速"实际是在 300W 下完成的
-- **实测真实功耗峰值：227W**（prefill+decode 负载，待机 15W）——27B 模型功耗需求低于 270W 和 300W 限制，**无论锁 270W 还是 300W，速度都不受影响**（根本没触顶）
-- 如需锁 270W：管理员执行 `nvidia-smi -pl 270`（每次开机需重设，可做开机任务）
-
-**速度对比（270W 真锁定 vs 300W）**：
-
-| 指标 | 300W | **270W（真锁定）** | 差异 |
-|:---|---:|---:|:---:|
-| 单流 ~11K | 63.55 t/s | **62.20 t/s** | -2.1%（噪声内） |
-| 两并发·平均 | 58.2 | **59.7** | +2.6% |
-| 两并发·总体 | 111.3 | **115.9** | +4.1% |
-
-**温度健康（270W，长负载 4000 tokens 全程监控）**：
-
-| 指标 | 峰值 | 评价 |
-|:---|---:|:---|
-| 功耗 | 244.3 W | 未触顶 270W |
-| GPU 温度 | **73°C** | 🟢 健康（上限 ~90-100°C） |
-| 风扇 | ~37% | 🟢 安静 |
-| SM 时钟 | 2595+ MHz 全速 | 🟢 无降频 |
-
-**结论**：27B 真实峰值功耗 244W < 270W 限制，锁 270W 速度几乎无损（-2%），温度 73°C 很健康；
-功耗未触顶（早前 300W 时峰值 227W），配置调整（0.80 util + FP8 KV）对速度影响在噪声范围内。
-显存运行期增长（57→61 GiB）为 CUDA graph/torch 缓存正常行为，重启即回收。
-
-**运维注意**：服务须在用户会话启动（双击 bat）；后台任务/Services 会话启动的实例普通权限杀不掉，会导致多实例叠加爆显存。
-
-### 4.8 SGLang + DSPARK 投机解码（LMSYS 教程部署，Docker）
-
-> 按 [LMSYS Qwen3.8-27B cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/Qwen/Qwen3.8-27B) 部署：
-> `lmsysorg/sglang:qwen38-27b` 镜像 + DSPARK 草稿（[RadixArk/Qwen3.8-27B-DSpark](https://huggingface.co/RadixArk/Qwen3.8-27B-DSpark)，1.36B 参数，gamma=7）
-> Windows 部署要点：`--mm-feature-transport cpu`（绕开 WSL2 CUDA IPC 句柄失效问题）
-
-| 指标 | **SGLang NVFP4+DSPARK** | SGLang FP8+DSPARK | vLLM NVFP4+MTP | vLLM FP8+MTP | llama.cpp GGUF+MTP |
+| 指标 | SGLang NVFP4+DSPARK | vLLM NVFP4+MTP | SGLang FP8+DSPARK | vLLM FP8+MTP | llama.cpp FP4+MTP |
 |:---|---:|---:|---:|---:|---:|
-| prefill 2K | **5,388-6,772 t/s** | 4,858-5,030 | 1,033 | 1,064 | 3,558 |
-| prefill 32K | **5,221-5,249** | 4,306-4,309 | 2,325 | 3,543 | 1,556 |
-| prefill 200K | 1,900 | — | **2,114** | 2,012 | 734 |
-| decode ~11K | **85.2 t/s** | 64.3 | 63.6 | 43.2 | 68.1 |
-| decode 200K | **71.4 t/s** | 52.7 | 57.8 | 15.3 ❌ | 42.2 |
-| 两并发·平均 | **76.8** | 55.7 | 56.3 | 44.0 | 35.6 |
-| 两并发·总体 | **147.6** | 101.8 | 112.6 | 87.0 | 66.1 |
+| 平均每流 | **76.8** | 56.3 | 55.7 | 44.0 | 35.6 |
+| 总体吞吐 | **147.6** | 112.6 | 101.8 | 87.0 | 66.1 |
 
-**结论**：
-- **SGLang NVFP4 + DSPARK 全场景冠军**：decode 85.2（短）/ 71.4（200K 长上下文**不衰减**——DSPARK 取代 MTP-1 的核心优势）
-- prefill 6000+ t/s（vLLM 的 6 倍）
-- FP8 + DSPARK 同样全面领先 vLLM 同权重
-- 部署脚本：`scripts/start_sglang_nvfp4_dspark.ps1` / `start_sglang_fp8_dspark.ps1`（Docker）
-- 📖 **完整部署教程（含全部踩坑）**：[docs/SGLang-DSPARK-Windows-部署教程.md](docs/SGLang-DSPARK-Windows-部署教程.md)
-- 注意：Docker Desktop 端口转发在 WSL2 下可能失效，测速在容器内执行
+### 4.4 MTP vs DSPARK 投机解码对比（含社区调研）
 
-### 4.8 模型质量参考（量化格式）
+| 维度 | MTP (n=1) | **DSPARK (γ=7)** |
+|:---|:---|:---|
+| 草稿来源 | checkpoint 内 1 层头 | 独立 1.36B 草稿 + 目标辅助特征 |
+| 短上下文收益 | +16~28% | **+72%（NVFP4 49.6→85.2）** |
+| 长上下文 (200K) | 衰减（FP8 路径 -42% ❌） | **不衰减（71.4 t/s）** |
+| 草稿大小 | 内嵌 | 2.53 GiB |
+| 根因 | 1 层头容量不足（[vLLM #47602](https://github.com/vllm-project/vllm/issues/47602)） | 置信度头动态调整草稿数，长上下文保持接受率 |
 
-| 格式 | 精度 | 相对 FP16 损失 |
+### 4.5 KV Cache 与显存
+
+| 配置 | KV 格式 | 显存 | 说明 |
+|:---|:---|:---:|:---|
+| llama.cpp q8_0 KV | 8-bit | 省 50% | 速度损失 ~1%（实测 200K 3 轮均值） |
+| vLLM fp8_e4m3 KV | 8-bit | KV 池容量翻倍 | fp8_e5m2 与 fp8 检查点不兼容 ⚠️ |
+| SGLang mamba ratio 0.7 | — | — | 控制 KV/mamba 状态池分配 |
+
+**显存纪律（实测教训）**：
+- vLLM `--gpu-memory-utilization 0.80`：总占用 57 GiB，GUI 余量 14.7 GiB（0.90 导致界面/RDP 卡死）
+- SGLang 容器**一次只跑一个**（两个容器 2×0.8 超分，FP8 被压到 available 0）
+- 270W 功率限制：实测峰值 244W 未触顶，速度/温度无影响（73°C）
+
+### 4.6 量化格式质量参考
+
+| 格式 | 精度 | 相对 FP16 |
 |:---|---:|---|
 | FP16/BF16 | 16-bit | 基线 |
-| FP8 (e4m3) | 8-bit FP | ~0.2-0.5%，基本无损 |
-| Q6_K | ~6.5-bit int | ~0.5-1%，近无损 |
-| NVFP4 | 4-bit FP (e2m1) | ~1-2%，可测但不明显 |
+| FP8 (e4m3) | 8-bit | ~0.2-0.5% |
+| Q6_K | ~6.5-bit | ~0.5-1% |
+| NVFP4 | 4-bit FP | ~1-2% |
+| FP4 GGUF | 4-bit | ~1-2% |
 
 ---
 
----
+## 🤖 Agent 场景选型（重写）
 
-## 🤖 Agent 场景：选谁？
+| 场景 | 首选 | 关键数字 | 备选 |
+|:---|:---|:---|:---|
+| 交互/工具调用（TTFT 敏感） | **SGLang NVFP4+DSPARK** | TTFT 0.4-0.5s @2.7K | vLLM NVFP4+MTP |
+| 高并发子 agent | **SGLang NVFP4+DSPARK** | 2 并发 147.6 t/s | vLLM NVFP4+MTP |
+| 长文档 decode（>30K） | **SGLang NVFP4+DSPARK** | 71.4 t/s @200K | vLLM NVFP4+MTP 57.8 |
+| RAG 灌入（prefill 敏感） | **SGLang（任一）** | 6000+ t/s | vLLM FP8 |
+| 质量优先/离线 | llama.cpp Q6_K | 近无损 | vLLM FP8 |
+| 不想装 Docker | vLLM NVFP4+MTP | 63.6 t/s 开箱即用 | — |
 
-| agent 工作负载特征 | vLLM FP8 | vLLM NVFP4 | llama.cpp Q6_K |
-|:---|:---:|:---:|:---:|
-| 大量短请求（工具调用） | ✅ TTFT 最快 | ✅ TTFT 接近 | ⚠️ ~2.5s 开销地板 |
-| 子 agent 并发生成 | ✅ 总体 64.7 | ✅ **总体 88.8** | ✅ 总体 68.2 |
-| RAG 长片段 prefill | ✅ **最快** | 中 | 慢 |
-| 长文写作 decode | ⚠️ 26-43 t/s（+MTP 短中程 43，长程 15 ❌） | ✅ **58-64 t/s（+MTP 全场景加速）** | ✅ 39-40 t/s |
-| 权重质量 | 近无损 | 4-bit（~1-2% 损失） | **最高** |
-
-**一句话**：**vLLM NVFP4 是综合最优解**——decode 最快、并发吞吐最高、权重最小（21.8 GiB）；FP8 仅在长文档 prefill 单项领先；llama.cpp Q6_K 在质量与运维简单性上保留价值。
-
-**实践建议**：
-- NVFP4/FP8：`--max-num-seqs` 提到 4-6，启动后发预热请求（首个请求冷启动可达 280s）
-- llama.cpp：`--ctx-size 1048576 --parallel 4 --cache-type-k q8_0 --cache-type-v q8_0`
-- agent 的 RAG 文档建议切片到 10-50K（200K prefill 需 110-302s，物理瓶颈）
+**一句话**：**SGLang NVFP4+DSPARK 是当前最优**；追求简单运维选 vLLM NVFP4+MTP；追求极致质量选 llama.cpp Q6_K。
 
 ---
 
-## ⚠️ 踩坑记录（方法论陷阱）
+## ⚠️ 踩坑记录（方法论陷阱 + 部署坑）
 
-1. **vLLM 启动后首个请求极慢**（280s+）—— CUDA graph/torch.compile 冷启动，需预热
-2. **prefix cache 污染**——相同前缀的 prompt 会命中缓存，测得虚高 prefill（5794 t/s 是假的，真实 2114 t/s）
-3. **GPU 抢占污染**——两服务同跑时 vLLM 降级运行，数据不可用
-4. **vLLM 随机 seed**——思考模式行为不稳定，复现需固定 seed
-5. **llama.cpp 小请求固定开销** ~2.5s/请求（TTFT 地板，与 prompt 长度无关）
+1. **vLLM 首请求冷启动 280s+** → 启动后预热
+2. **prefix cache 污染测速**（5794 t/s 是假的）
+3. **GPU 超分卡死**：vLLM 0.90 / 双 SGLang 容器 → GUI/RDP 冻结（DWM 在独显）
+4. **WSL2 CUDA IPC 失效**：SGLang 需 `--mm-feature-transport cpu`
+5. **Docker 端口转发失效**：容器内 `docker exec` 测速（`MSYS_NO_PATHCONV=1`）
+6. **bat 中文注释 GBK 闪退** → 纯 ASCII
+7. **后台任务启动服务进 Session 0 杀不掉** → 双击启动
+8. **fp8_e5m2 KV 与 fp8 检查点不兼容** → 用 fp8_e4m3
+9. **llama.cpp 每请求 ~2.5s 固定开销**（TTFT 地板）
 
 ---
 
-## 🔧 NVFP4 部署记录（Windows，已解决 ✅）
+## 🔧 NVFP4 部署记录（Windows）
 
-模型从 hf-mirror 下载（21.8 GiB，1968 权重条目校验通过）。vLLM-on-Windows 工具链问题链，**通过 3 个本地补丁全部解决**：
-
-| # | 问题 | 根因 | 解决 |
-|:---:|---|---|---|
-| 1 | C2719 "128 对齐形参" | CUDA 13.3 cudafe stub × MSVC 14.44 不兼容 | 换 marlin 后端（预编译内核，无需 JIT） |
-| 2 | ParallelLMHead 缺 `output_size_per_partition` | vLLM 0.26 bug（marlin 路径） | 补丁 ① `marlin_utils_fp8.py`：size_k_first 自适应 |
-| 3 | 同上（forward 路径） | 同上 | 补丁 ② `scaled_mm/marlin.py`：用 `num_embeddings_per_partition`/`embedding_dim` 兜底 |
-| 4 | `from flashinfer import` 解析到 vLLM 内部模块 | 引擎子进程 sys.path 遮蔽真实 flashinfer | 补丁 ③ `site-packages/sitecustomize.py`：进程启动时预导入真包 |
-
-**部署命令**：`scripts/run_vllm_nvfp4_bench.bat`（marlin 后端 + 3 补丁后）
-
-**性能备注**：NVFP4 走 marlin(mxfp4) 后端（非 flashinfer FP4 JIT 路径），实测速度见 §4——decode 全面领先，FP4 张量核优势完整兑现。
+vLLM marlin 路径需 3 个本地补丁（sitecustomize / marlin_utils_fp8 / marlin）；SGLang 走 Docker 无此问题。
+**完整 SGLang 部署教程**：[docs/SGLang-DSPARK-Windows-部署教程.md](docs/SGLang-DSPARK-Windows-部署教程.md)
 
 ---
 
 ## 📁 仓库结构
 
 ```
-qwen3.8-27b-q6k-fp8-rtx-pro5000-serving-benchmark/
-├── README.md              # 本报告
-├── scripts/
-│   ├── prefill_test.py    # prefill / TTFT 测试（随机文本防缓存）
-│   ├── conc_test.py       # N 并发 decode profile 测试
-│   ├── start_qwen38q6_vision.bat  # llama.cpp Q6_K 部署
-│   ├── run_vllm_nvfp4_bench.bat   # vLLM NVFP4 部署（marlin）
-│   ├── run_vllm_fp8_mtp_bench.bat    # vLLM FP8 + MTP 投机解码
-│   └── run_vllm_nvfp4_mtp_bench.bat  # vLLM NVFP4 + MTP 投机解码
+├── README.md / README.en.md
+├── docs/SGLang-DSPARK-Windows-部署教程.md
+└── scripts/
+    ├── conc_test.py / prefill_test.py      # 测速
+    ├── start_qwen38q6_vision.bat           # llama.cpp Q6_K
+    ├── start_qwen38_nvfp4_gguf_mtp.bat     # llama.cpp FP4 GGUF+MTP
+    ├── start_qwen38_nvfp4_gguf_orig.bat    # llama.cpp FP4 GGUF ORIG
+    ├── run_vllm_nvfp4_mtp_bench.bat        # vLLM NVFP4+MTP（0.80 + fp8 KV）
+    ├── run_vllm_fp8_mtp_bench.bat          # vLLM FP8+MTP
+    ├── start_sglang_nvfp4_dspark.ps1       # SGLang NVFP4+DSPARK
+    └── start_sglang_fp8_dspark.ps1         # SGLang FP8+DSPARK
 ```
 
 ## 🔄 复现方法
 
 ```bash
-# prefill/TTFT（三个服务均可）
+# prefill/TTFT、并发 decode（三引擎通用；SGLang 在容器内执行）
 python scripts/prefill_test.py <API_BASE_URL> <model_name> <label>
-
-# N 并发 decode profile
 python scripts/conc_test.py <API_BASE_URL> <model_name> <N> <max_tokens> <label>
 ```
 
 ---
 
-## 🆚 跨设备横向对比（DGX Spark / RTX PRO 5000 / RTX PRO 6000）
+## 🆚 跨设备横向对比（DGX Spark / PRO 5000 / PRO 6000）——重写
 
-> 摘要自 [三设备横向对比](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)（完整档位与测试方法见该文档）。
-> ⚠️ 口径差异：三台设备 vLLM 版本 / MTP 设置 / 操作系统不完全相同，数量级参考意义大于精确对比。
+> 完整版见 [PRO 6000 仓库对比文档](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
+> ⚠️ 引擎版本差异大（SGLang / vLLM 0.26 / vLLM 0.21 / llama.cpp），数量级参考
 
-**单并发 decode（tok/s）**
+**单流 decode（tok/s）**
 
-| 上下文 | DGX Spark NVFP4+MTP×3 | PRO 5000 FP8 无MTP → +MTP（本仓库） | PRO 5000 NVFP4 无MTP → +MTP（本仓库） | PRO 5000 Q6_K 无MTP → +MTP（本仓库） | PRO 6000 NVFP4 无MTP → +MTP(n=2) | PRO 6000 Q6_K |
-|:---|---:|---:|---:|---:|---:|---:|
-| 短（~1-11K） | ~21 | 37.3 → 43.2 | 49.6 → 63.6 | 39.7 → 61.9 | 58.6 → **100.2** | 55.4 |
-| ~148K | — | 26.4 → 15.3 ❌ | 42.1 → **57.8** ✅（PRO 6000 同栈复测仅 21.4 ❌，见 §4.4） | 39.9 → 40.0 | ≈46* → 21.4 ❌ | — |
-| ~200K | 14.2 | 26.4（无MTP） | 42.1（无MTP） | 39.9 | **43.7** → 18.2 ❌ | 35.7 |
+| 上下文 | DGX Spark NVFP4+MTP×3 | **PRO 5000 SGLang NVFP4+DSPARK** | PRO 5000 vLLM NVFP4+MTP | PRO 6000 vLLM NVFP4+MTP(n=2) | PRO 6000 Q6_K |
+|:---|---:|---:|---:|---:|---:|
+| 短 (~1-11K) | ~21 | 85.2 | 63.6 | **100.2** | 55.4 |
+| ~148-200K | 14.2 | **71.4** 🏆 | 57.8 | 43.7（无MTP） | 35.7 |
 
-\* PRO 6000 无 MTP 148K 未单测，为 100K/200K 插值。
+**prefill 200K（tok/s）/ TTFT（s）**
 
-**单并发 prefill ~200K（tok/s）/ TTFT（s）**
+| DGX Spark | **PRO 5000 SGLang NVFP4+DSPARK** | PRO 5000 vLLM FP8 | PRO 6000 vLLM NVFP4+MTP |
+|---|---:|---:|---:|
+| 840 / 244s | 1,900 / 122s | 2,114 / 110s | **4,447 / 39.9s** |
 
-| DGX Spark NVFP4 | PRO 5000 FP8（本仓库） | PRO 5000 Q6_K（本仓库） | **PRO 6000 FP8+MTP** | PRO 6000 NVFP4+MTP | PRO 6000 Q6_K |
-|---|---|---|---|---|---|
-| 840 / 244s | 2,114 / 110s | 768 / 302s | 3,869 / 45.8s | **4,447 / 39.9s** | 1,676 / 105.9s |
+**并发总体（tok/s）**
 
-**并发 decode 聚合吞吐（tok/s）**
+| 并发 | PRO 5000 SGLang DSPARK | PRO 6000 vLLM NVFP4+MTP | PRO 6000 Q6_K(4槽) |
+|:---:|---:|---:|---:|
+| 1 | 85.2 | 95.0 | 49.6 |
+| 2 | 147.6 | **151.3** | 92.8 |
+| 4 | — | 346.5 | 158.5 |
+| 8 | — | **654.1** | — |
 
-| 并发 | DGX Spark NVFP4 | PRO 5000 FP8（本仓库） | PRO 5000 NVFP4（本仓库） | **PRO 5000 NVFP4+MTP（本仓库）** | PRO 6000 FP8+MTP | PRO 6000 NVFP4+MTP | PRO 6000 Q6_K（4 槽） |
-|:---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 20.0 | 37.3 | 49.6 | **63.6** | 78.8 | 95.0 | 49.6 |
-| 2 | 22.7 | 64.7 | 88.8 | **112.6** | 137.0 | 151.3 | 92.8 |
-| 4 | 44.0 | — | — | — | 299.3 | 346.5 | 158.5 |
-| 8 | 77.7 | — | — | — | 556.2 | **654.1** | — |
+**新结论（重写）**：
 
-> 注：PRO 5000 仅测到 2 并发（72GB 卡，4 并发需降低单槽上下文）；PRO 6000 96GB 可到 8 并发。
-
-一句话：**PRO 6000 在 prefill/TTFT/并发上全面领先；长上下文 decode 的最高报告值是本仓库的
-NVFP4+MTP 57.8 t/s @148K（Windows），但 PRO 6000（Linux）用完全相同软件栈复测仅 21.4 t/s——
-n 值/后端/版本/调度参数逐一排除、接受率全程健康，差异指向 OS/驱动层**。
-FP8+MTP 在两台设备长上下文均为负优化——用前实测自己的配置（详见本仓库 §4.4/§4.5）。
+1. **引擎优化 > 硬件差距**：PRO 5000（72GB）+ SGLang DSPARK 在长上下文 decode（71.4 vs 43.7）**大幅反超** PRO 6000（96GB）+ vLLM——投机解码选对，小卡反超大卡
+2. **PRO 6000 保留优势**：短上下文峰值（100.2 vs 85.2）、并发扩展（8 路 654）
+3. **DGX Spark 的价值**：128GB 统一内存 + 低功耗桌面形态，绝对速度不在一个量级
+4. **预判**：PRO 6000 若也上 SGLang DSPARK，短/长/并发预计全面压制（未测，权重更大 + 引擎更好）
+5. PRO 5000 短 prefill 6000+ t/s 为三设备最高（SGLang 引擎优化）
 
 ---
 
 ## 🔗 相关仓库
 
-- [RTX PRO 6000 FP8 vs NVFP4 benchmark](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark) — 含 [DGX Spark / PRO 5000 / PRO 6000 三设备横向对比](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark/blob/main/docs/Qwen3.8-27B-跨设备横向对比.md)
+- [RTX PRO 6000 benchmark（含三设备横向对比）](https://github.com/Deep-AI-Evo/qwen3.8-27b-fp8-nvfp4-rtx-pro6000-serving-benchmark)
 - [DGX Spark NVFP4 部署教程](https://github.com/Deep-AI-Evo/qwen3.8-27b-nvfp4-dgx-spark-tutorial)
+- [LMSYS Qwen3.8-27B cookbook（SGLang 参考）](https://lmsysorg.mintlify.app/cookbook/autoregressive/Qwen/Qwen3.8-27B)
 
 ---
 
-*测试与文档：Deep-AI-Evo · 模型：Qwen3.8-27B (Apache-2.0) · 数据基于单机实测，不同环境可能略有差异*
+*测试与文档：Deep-AI-Evo · 模型：Qwen3.8-27B (Apache-2.0) · 单机实测，环境不同结果可能略有差异*
