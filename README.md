@@ -251,6 +251,29 @@ prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生�
 
 **运维注意**：服务须在用户会话启动（双击 bat）；后台任务/Services 会话启动的实例普通权限杀不掉，会导致多实例叠加爆显存。
 
+### 4.8 SGLang + DSPARK 投机解码（LMSYS 教程部署，Docker）
+
+> 按 [LMSYS Qwen3.8-27B cookbook](https://lmsysorg.mintlify.app/cookbook/autoregressive/Qwen/Qwen3.8-27B) 部署：
+> `lmsysorg/sglang:qwen38-27b` 镜像 + DSPARK 草稿（[RadixArk/Qwen3.8-27B-DSpark](https://huggingface.co/RadixArk/Qwen3.8-27B-DSpark)，1.36B 参数，gamma=7）
+> Windows 部署要点：`--mm-feature-transport cpu`（绕开 WSL2 CUDA IPC 句柄失效问题）
+
+| 指标 | **SGLang NVFP4+DSPARK** | SGLang FP8+DSPARK | vLLM NVFP4+MTP | vLLM FP8+MTP | llama.cpp GGUF+MTP |
+|:---|---:|---:|---:|---:|---:|
+| prefill 2K | **5,388-6,772 t/s** | 4,858-5,030 | 1,033 | 1,064 | 3,558 |
+| prefill 32K | **5,221-5,249** | 4,306-4,309 | 2,325 | 3,543 | 1,556 |
+| prefill 200K | 1,900 | — | **2,114** | 2,012 | 734 |
+| decode ~11K | **85.2 t/s** | 64.3 | 63.6 | 43.2 | 68.1 |
+| decode 200K | **71.4 t/s** | 52.7 | 57.8 | 15.3 ❌ | 42.2 |
+| 两并发·平均 | **76.8** | 55.7 | 56.3 | 44.0 | 35.6 |
+| 两并发·总体 | **147.6** | 101.8 | 112.6 | 87.0 | 66.1 |
+
+**结论**：
+- **SGLang NVFP4 + DSPARK 全场景冠军**：decode 85.2（短）/ 71.4（200K 长上下文**不衰减**——DSPARK 取代 MTP-1 的核心优势）
+- prefill 6000+ t/s（vLLM 的 6 倍）
+- FP8 + DSPARK 同样全面领先 vLLM 同权重
+- 部署脚本：`scripts/start_sglang_nvfp4_dspark.ps1` / `start_sglang_fp8_dspark.ps1`（Docker）
+- 注意：Docker Desktop 端口转发在 WSL2 下可能失效，测速在容器内执行
+
 ### 4.8 模型质量参考（量化格式）
 
 | 格式 | 精度 | 相对 FP16 损失 |
