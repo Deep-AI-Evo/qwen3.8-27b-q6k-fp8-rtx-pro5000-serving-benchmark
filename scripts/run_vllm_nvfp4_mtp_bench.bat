@@ -32,7 +32,7 @@ REM ============================================================
   --port %PORT% ^
   --max-model-len 262144 ^
   --gpu-memory-utilization 0.80 ^
-  --max-num-seqs 4 ^
+  --max-num-seqs 3 ^
   --enable-prefix-caching ^
   --kv-cache-dtype fp8_e4m3 ^
   --tool-call-parser qwen3_xml ^
