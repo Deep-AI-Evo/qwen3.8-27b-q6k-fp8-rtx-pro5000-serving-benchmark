@@ -204,6 +204,15 @@ Acceptance rate (position-1): 93.5% @2K → 72.1% @30K; overall average 64.9% �
 **VERY-HIGH wins everywhere**: decode 30-60% faster, 24% faster prefill, 12.6 GiB less VRAM, double concurrency.
 ORIG's only edge is potentially higher fidelity (unverified). **VERY-HIGH + MTP single-stream 68.1 t/s is the fastest of all schemes tested (incl. vLLM NVFP4+MTP at 63.6).**
 
+### 4.8 Power Limit Correction & Memory Config (measured)
+
+> ⚠️ **Correction**: the 270W limit set via `nvidia-smi -pl 270` was **not persistent** — actual Current Power Limit = **300W** (default). The earlier "270W benchmark" was actually run at 300W.
+> **Measured real peak power draw: 227W** (prefill+decode; 15W idle) — the 27B model never hits either limit, so speed is unaffected at 270W or 300W.
+> To lock 270W: `nvidia-smi -pl 270` as admin (re-apply after reboot).
+>
+> Final config: `--gpu-memory-utilization 0.80 --kv-cache-dtype fp8_e4m3` (fp8_e5m2 incompatible with fp8 checkpoints). 0.80 leaves ~14.7 GiB for Windows GUI/RDP (0.90 caused UI freeze).
+> Ops note: servers must be started in the user session (double-click bat); instances started via background/services land in Session 0 and can't be killed without admin, stacking VRAM.
+
 ### 4.8 Quantization Quality Reference
 
 | Format | Precision | Loss vs FP16 |
