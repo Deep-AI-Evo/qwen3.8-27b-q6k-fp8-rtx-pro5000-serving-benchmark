@@ -114,6 +114,23 @@
 | vLLM fp8_e4m3 KV | 8-bit | 2× pool capacity | fp8_e5m2 incompatible with fp8 checkpoints ⚠️ |
 | SGLang mamba ratio 0.7 | — | — | controls KV/mamba state pool split |
 
+**Engine memory efficiency (fp8 KV, why vLLM can do 3×256K but SGLang cannot)**:
+
+| Dimension | **vLLM** NVFP4+MTP (0.80) | **SGLang** NVFP4+DSPARK (0.85) | SGLang 0.90 (maxed) |
+|:---|:---:|:---:|:---:|
+| KV pool | **954K tokens** | 552K tokens | 618K tokens |
+| 256K concurrency | **3.9** | 2.2 | 2.4 |
+| mamba state overhead | ~3 GiB | **~14 GiB** | ~14 GiB |
+| Draft size | MTP 0.8 GiB | DSPARK 2.5 GiB | 2.5 GiB |
+| GUI headroom | 14.7 GiB | ~6 GiB | **0.5 GiB** ❌ |
+
+> Root cause: SGLang pre-allocates a mamba state pool + radix state cache (~14 GiB) for GDN linear-attention layers;
+> vLLM handles states compactly (~3 GiB). DSPARK draft is 1.7 GiB larger than MTP. All levers tested
+> (ratio 8.26 / extra_buffer_lazy / mem-fraction 0.90) cannot get SGLang to 3×256K.
+> **Conclusion: vLLM is memory-efficient (big KV pool → 3×256K), SGLang is speed-oriented (fast single stream).
+> They complement each other: "daily" vs "extreme" tiers.**
+> Test note: benchmark prompt 254,460 tokens (~254K, leaving output headroom); model context limit 262,144 (256K).
+
 **Memory discipline (measured lessons)**:
 - vLLM `--gpu-memory-utilization 0.80`: 57 GiB total, 14.7 GiB GUI headroom (0.90 froze GUI/RDP)
 - SGLang: **one container at a time** (two containers oversubscribe; FP8 got available=0)

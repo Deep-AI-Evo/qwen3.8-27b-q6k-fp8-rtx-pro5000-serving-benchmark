@@ -27,7 +27,7 @@
 | 5 | **质量/极简运维：llama.cpp Q6_K** | ~6.5-bit 近无损，单 exe 部署 |
 | 6 | **FP4 GGUF 是 llama.cpp 的提速器** | NVFP4 GGUF+MTP 68.1 t/s（Q6_K 的 1.7 倍） |
 | 7 | **锁 270W 无性能损失** | 实测峰值功耗 244W < 270W，温度 73°C 健康 |
-| 8 | **显存纪律**：0.80 util / 单容器 | 超分导致 GUI/RDP 卡死（实测踩坑） |
+| 8 | **显存纪律**：0.80 util / 单容器；**3×256K 并发只有 vLLM 能做到**（KV 池 954K vs SGLang 552K） | 超分导致 GUI/RDP 卡死（实测踩坑） |
 
 ---
 
@@ -118,6 +118,24 @@
 - vLLM `--gpu-memory-utilization 0.80`：总占用 57 GiB，GUI 余量 14.7 GiB（0.90 导致界面/RDP 卡死）
 - SGLang 容器**一次只跑一个**（两个容器 2×0.8 超分，FP8 被压到 available 0）
 - 270W 功率限制：实测峰值 244W 未触顶，速度/温度无影响（73°C）
+
+**引擎显存效率对比（fp8 KV，为何 vLLM 能 3×256K 而 SGLang 不能）**：
+
+| 维度 | **vLLM** NVFP4+MTP (0.80) | **SGLang** NVFP4+DSPARK (0.85) | SGLang 0.90（榨干） |
+|:---|:---:|:---:|:---:|
+| KV 池容量 | **954K tokens** | 552K tokens | 618K tokens |
+| 256K 并发容量 | **3.9 个** | 2.2 个 | 2.4 个 |
+| mamba 状态开销 | ~3 GiB | **~14 GiB** | ~14 GiB |
+| 草稿大小 | MTP 0.8 GiB | DSPARK 2.5 GiB | 2.5 GiB |
+| GUI 余量 | 14.7 GiB | ~6 GiB | **0.5 GiB** ❌ |
+
+> 根因：SGLang 为 GDN 线性注意力预分配 mamba 状态池 + radix 状态缓存（~14 GiB），
+> vLLM 紧凑按需（~3 GiB）；DSPARK 草稿比 MTP 大 1.7 GiB；草稿 verify CUDA graph 预留更多。
+> 实测杠杆（ratio 8.26 / extra_buffer_lazy / mem-fraction 0.90）均无法让 SGLang 达到 3×256K。
+>
+> **结论：vLLM 是显存效率型（KV 池大），SGLang 是速度型（单流快）——3×256K 并发只有 vLLM 能做到；
+> 单流极限速度只有 SGLang 能做到。两引擎互补，对应"日常"与"极致"两档。**
+> 测试口径说明：测试 prompt 254,460 tokens（≈254K，留输出余量），模型上下文上限 262,144（256K）。
 
 ### 4.6 量化格式质量参考
 
