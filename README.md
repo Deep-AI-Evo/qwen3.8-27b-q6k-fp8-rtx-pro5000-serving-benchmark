@@ -272,6 +272,7 @@ prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生�
 - prefill 6000+ t/s（vLLM 的 6 倍）
 - FP8 + DSPARK 同样全面领先 vLLM 同权重
 - 部署脚本：`scripts/start_sglang_nvfp4_dspark.ps1` / `start_sglang_fp8_dspark.ps1`（Docker）
+- 📖 **完整部署教程（含全部踩坑）**：[docs/SGLang-DSPARK-Windows-部署教程.md](docs/SGLang-DSPARK-Windows-部署教程.md)
 - 注意：Docker Desktop 端口转发在 WSL2 下可能失效，测速在容器内执行
 
 ### 4.8 模型质量参考（量化格式）
