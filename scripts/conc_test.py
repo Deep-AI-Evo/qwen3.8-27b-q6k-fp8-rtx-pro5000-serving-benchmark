@@ -39,7 +39,7 @@ def worker(i):
             if obj.get("usage"): usage = obj["usage"]; continue
             for c in obj.get("choices") or []:
                 delta = c.get("delta") or {}
-                d = delta.get("content") or delta.get("reasoning_content") or ""
+                d = delta.get("content") or delta.get("reasoning_content") or delta.get("reasoning") or ""
                 if d:
                     if first_t is None: first_t = time.perf_counter()
                     n_out += 1

@@ -215,6 +215,27 @@ prefill 排行不变：FP8 > NVFP4 > Q6_K。MTP 的全部收益/损失都发生�
 
 **部署**：`scripts/start_qwen38_nvfp4_gguf_mtp.bat`（VERY-HIGH）/ `scripts/start_qwen38_nvfp4_gguf_orig.bat`（ORIG）
 
+### 4.8 功率限制与显存配置实测（270W + 0.80 util + FP8 KV）
+
+> 现象：vLLM 0.90 util 时 GPU 显存 99% 占用，Windows 图形栈（DWM/RDP 渲染）无显存可用 → 界面/RDP 卡死。
+> 注意：显示器接核显也没用——Windows 桌面合成默认走独显。
+
+**最终配置**：`--gpu-memory-utilization 0.80 --kv-cache-dtype fp8_e4m3`
+（fp8_e5m2 与 fp8 检查点不兼容；0.80 util 给 GUI 留 ~14.7 GiB）
+
+**270W 功率限制对 NVFP4+MTP 的速度影响**（实测）：
+
+| 指标 | 无限制 | 270W 限制 | 差异 |
+|:---|---:|---:|:---:|
+| 单流 ~11K | 63.6 t/s | 63.55 t/s | ±0% |
+| 两并发·平均 | 56.3 | 58.2 | +3% |
+| 两并发·总体 | 112.6 | 111.3 | -1% |
+| 200K decode | 57.8 | 54.7 | -5% |
+
+**结论**：27B decode 功耗 ~150-200W 远低于 270W 上限，功率限制基本无影响。
+
+**运维注意**：服务须在用户会话启动（双击 bat）；后台任务/Services 会话启动的实例普通权限杀不掉，会导致多实例叠加爆显存。
+
 ### 4.8 模型质量参考（量化格式）
 
 | 格式 | 精度 | 相对 FP16 损失 |

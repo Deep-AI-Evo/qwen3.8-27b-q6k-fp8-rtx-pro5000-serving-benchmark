@@ -29,7 +29,7 @@ REM ============================================================
   --host 0.0.0.0 ^
   --port %PORT% ^
   --max-model-len 262144 ^
-  --gpu-memory-utilization 0.90 ^
+  --gpu-memory-utilization 0.80 ^
   --max-num-seqs 2 ^
   --enable-prefix-caching ^
   --kv-cache-dtype fp8_e4m3 ^
